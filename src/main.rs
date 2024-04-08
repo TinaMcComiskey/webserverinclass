@@ -14,7 +14,7 @@ fn discard_request(tcp_stream: &mut TcpStream) {
         line.clear();
     }
 }
-
+// Test webserver
 fn main() {
     let localhost = Ipv4Addr::new(127, 0, 0, 1);
     let socket_addr = SocketAddrV4::new(localhost, 3000);
