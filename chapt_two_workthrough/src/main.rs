@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind};
+use std::io::{Error as IOError, ErrorKind};
 use std::str::FromStr;
 use warp::{
     filters::cors::CorsForbidden, http::Method, http::StatusCode, reject::Reject, Filter,
@@ -22,12 +22,11 @@ async fn get_questions(
     params: HashMap<String, String>,
     store: Store,
 ) -> Result<impl Reply, Rejection> {
+    let mut start = 0;
     if let Some(n) = params.get("start") {
-        println!("{:?}", n.parse::<usize>());
+        start = n.parse::<usize>().expect("Could not parse start");
     }
-    if let Some(n) = params.get("start") {
-        println!("{}", n);
-    }
+    println!("{}", start);
     match params.get("start") {
         Some(start) => println!("{}", start),
         None => println!("No start value"),
@@ -35,6 +34,30 @@ async fn get_questions(
     println!("{:?}", params);
     let res: Vec<Question> = store.questions.values().cloned().collect();
     Ok(warp::reply::json(&res))
+}
+
+#[derive(Debug)]
+struct Pagination {
+    start: usize,
+    end: usize,
+}
+
+fn extract_pagination(params: HashMap<String, String>) -> Result<Pagination, Error> {
+    if params.contains_key("start") && params.contains_key("end") {
+        return Ok(Pagination {
+            start: params
+                .get("start")
+                .unwrap()
+                .parse::<usize>()
+                .map_err(Error::ParseError)?,
+            end: params
+                .get("end")
+                .unwrap()
+                .parse::<usize>()
+                .map_err(Error::ParseError)?,
+        });
+    }
+    Err(Error::MissingParameters)
 }
 
 async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
@@ -52,11 +75,30 @@ async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
     }
 }
 
+#[derive(Debug)]
+enum Error {
+    ParseError(std::num::ParseIntError),
+    MissingParameters,
+}
+
+#[derive(Clone)]
 struct Store {
     questions: HashMap<QuestionId, Question>,
 }
 
-#[derive(Clone)]
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            Error::ParseError(ref err) => {
+                write!(f, "Cannot parse parameter: {}", err)
+            }
+            Error::MissingParameters => write!(f, "Missing parameter"),
+        }
+    }
+}
+
+impl Reject for Error {}
+
 impl Store {
     fn new() -> Self {
         Store {
