@@ -23,6 +23,15 @@ struct Question {
     tags: Option<Vec<String>>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+struct AnswerId(String);
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct Answer {
+    id: AnswerId,
+    content: String,
+    question_id: QuestionId,
+}
+
 async fn get_questions(
     params: HashMap<String, String>,
     store: Store,
@@ -67,6 +76,23 @@ async fn delete_question(id: String, store: Store) -> Result<impl warp::Reply, w
         Some(_) => return Ok(warp::reply::with_status("Question deleted", StatusCode::OK)),
         None => return Err(warp::reject::custom(Error::QuestionNotFound)),
     }
+}
+
+async fn add_answer(
+    store: Store,
+    params: HashMap<String, String>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let answer = Answer {
+        id: AnswerId("1".to_string()),
+        content: params.get("content").unwrap().to_string(),
+        question_id: QuestionId(params.get("questionId").unwrap().to_string()),
+    };
+    store
+        .answers
+        .write()
+        .await
+        .insert(answer.id.clone(), answer);
+    Ok(warp::reply::with_status("Answer added", StatusCode::OK))
 }
 
 #[derive(Debug)]
@@ -128,6 +154,7 @@ enum Error {
 #[derive(Clone)]
 struct Store {
     questions: Arc<RwLock<HashMap<QuestionId, Question>>>,
+    answers: Arc<RwLock<HashMap<AnswerId, Answer>>>,
 }
 
 impl std::fmt::Display for Error {
@@ -148,6 +175,7 @@ impl Store {
     fn new() -> Self {
         Store {
             questions: Arc::new(RwLock::new(Self::init())),
+            answers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     fn init() -> HashMap<QuestionId, Question> {
@@ -190,9 +218,16 @@ async fn main() {
         .and(warp::path::end())
         .and(store_filter.clone())
         .and_then(delete_question);
+    let add_answer = warp::post()
+        .and(warp::path("answers"))
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::form())
+        .and_then(add_answer);
     let routes = get_items
         .or(add_question)
         .or(update_question)
+        .or(add_answer)
         .or(delete_question)
         .with(cors)
         .recover(return_error);
