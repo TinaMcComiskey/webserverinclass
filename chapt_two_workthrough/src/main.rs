@@ -5,8 +5,11 @@ use tokio::sync::RwLock;
 // use std::io::{Error as IOError, ErrorKind};
 // use std::str::FromStr;
 use warp::{
-    filters::cors::CorsForbidden, http::Method, http::StatusCode, reject::Reject, Filter,
-    Rejection, Reply,
+    filters::{body::BodyDeserializeError, cors::CorsForbidden},
+    http::Method,
+    http::StatusCode,
+    reject::Reject,
+    Filter, Rejection, Reply,
 };
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -47,6 +50,21 @@ async fn add_question(
     Ok(warp::reply::with_status("Question added", StatusCode::OK))
 }
 
+async fn update_question(
+    id: String,
+    store: Store,
+    question: Question,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match store.questions.write().await.get_mut(&QuestionId(id)) {
+        Some(q) => *q = question,
+        None => return Err(warp::reject::custom(Error::QuestionNotFound)),
+    }
+    Ok(warp::reply::with_status(
+        "Question updated", 
+        StatusCode::OK
+    ))
+}
+
 #[derive(Debug)]
 struct Pagination {
     start: usize,
@@ -83,6 +101,11 @@ async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
             error.to_string(),
             StatusCode::FORBIDDEN,
         ))
+    } else if let Some(error) = r.find::<BodyDeserializeError>() {
+        Ok(warp::reply::with_status(
+            error.to_string(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ))
     } else {
         Ok(warp::reply::with_status(
             "Route not found".to_string(),
@@ -110,6 +133,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Cannot parse parameter: {}", err)
             }
             Error::MissingParameters => write!(f, "Missing parameter"),
+            Error::QuestionNotFound => write!(f, "Question not found"),
         }
     }
 }
@@ -149,6 +173,17 @@ async fn main() {
         .and(store_filter.clone())
         .and(warp::body::json())
         .and_then(add_question);
-    let routes = get_items.or(add_question).with(cors).recover(return_error);
+    let update_question = warp::put()
+        .and(warp::path("questions"))
+        .and(warp::path::param::<String>())
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(update_question);
+    let routes = get_items
+        .or(add_question)
+        .or(update_question)
+        .with(cors)
+        .recover(return_error);
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
 }
