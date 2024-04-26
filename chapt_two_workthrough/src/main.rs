@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-// use std::io::{Error as IOError, ErrorKind};
-// use std::str::FromStr;
 use warp::{
     filters::{body::BodyDeserializeError, cors::CorsForbidden},
     http::Method,
@@ -47,6 +45,7 @@ async fn get_questions(
     }
 }
 
+// Start of CRUD
 async fn add_question(
     store: Store,
     question: Question,
@@ -73,8 +72,8 @@ async fn update_question(
 
 async fn delete_question(id: String, store: Store) -> Result<impl warp::Reply, warp::Rejection> {
     match store.questions.write().await.remove(&QuestionId(id)) {
-        Some(_) => return Ok(warp::reply::with_status("Question deleted", StatusCode::OK)),
-        None => return Err(warp::reject::custom(Error::QuestionNotFound)),
+        Some(_) => Ok(warp::reply::with_status("Question deleted", StatusCode::OK)),
+        None => Err(warp::reject::custom(Error::QuestionNotFound)),
     }
 }
 
@@ -108,12 +107,12 @@ fn extract_pagination(params: HashMap<String, String>) -> Result<Pagination, Err
                 .get("start")
                 .unwrap()
                 .parse::<usize>()
-                .map_err(Error::ParseError)?,
+                .map_err(Error::ParseErrorInt)?,
             end: params
                 .get("end")
                 .unwrap()
                 .parse::<usize>()
-                .map_err(Error::ParseError)?,
+                .map_err(Error::ParseErrorInt)?,
         });
     }
     Err(Error::MissingParameters)
@@ -146,7 +145,7 @@ async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
 
 #[derive(Debug)]
 enum Error {
-    ParseError(std::num::ParseIntError),
+    ParseErrorInt(std::num::ParseIntError),
     MissingParameters,
     QuestionNotFound,
 }
@@ -160,7 +159,7 @@ struct Store {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            Error::ParseError(ref err) => {
+            Error::ParseErrorInt(ref err) => {
                 write!(f, "Cannot parse parameter: {}", err)
             }
             Error::MissingParameters => write!(f, "Missing parameter"),
