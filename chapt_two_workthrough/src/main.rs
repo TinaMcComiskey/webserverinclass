@@ -1,14 +1,17 @@
 use axum::{
-    routing::{get, post, delete, put}, 
-    Router, serve, Json, 
-    http::{StatusCode, Response},
-    extract::{State, Path},
-    body::Body
+    body::Body,
+    extract::{Path, State},
+    http::{Response, StatusCode},
+    response::IntoResponse,
+    routing::{delete, get, post, put},
+    Json, Router, 
 };
+
+use serde::{Deserialize, Serialize};
+use hyper::server;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
@@ -20,27 +23,29 @@ struct Question {
 
 type Questions = Arc<Mutex<HashMap<Uuid, Question>>>;
 
-async fn get_question(State(questions): State<Questions>) -> Response<Body> {
+async fn get_question(State(questions): State<Questions>) -> impl IntoResponse {
     let id = Uuid::new_v4();
     let questions = questions.lock().await;
     match questions.get(&id) {
-         Some(question) => {
+        Some(question) => {
             let json = serde_json::to_string(&question).unwrap();
             Response::builder()
                 .status(StatusCode::OK)
                 .body(Body::from(json))
                 .unwrap()
-        },
-        None => {
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Question not found"))
-                .unwrap()
-        },
+        }
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Question not found"))
+            .unwrap(),
     }
 }
 
-async fn add_question(State(questions): State<Questions>, Path(id): Path<Uuid>, new_question: Json<Question>) -> (StatusCode, Json<String>) {
+async fn add_question(
+    State(questions): State<Questions>,
+    Path(id): Path<Uuid>,
+    new_question: Json<Question>,
+) -> impl IntoResponse {
     let mut questions = questions.lock().await;
     let id = Path(id);
     let question = Question {
@@ -52,7 +57,10 @@ async fn add_question(State(questions): State<Questions>, Path(id): Path<Uuid>, 
     (StatusCode::OK, Json("Inserted successfully".to_string()))
 }
 
-async fn update_question(State(questions): State<Questions>, updated_question: Json<Question>) -> (StatusCode, Json<String>) {
+async fn update_question(
+    State(questions): State<Questions>,
+    updated_question: Json<Question>,
+) -> impl IntoResponse {
     let mut questions = questions.lock().await;
     let id = updated_question.id.clone();
     if let Some(question) = questions.get_mut(&id) {
@@ -63,28 +71,44 @@ async fn update_question(State(questions): State<Questions>, updated_question: J
         };
         (StatusCode::OK, Json("Question updated".to_string()))
     } else {
-        (StatusCode::NOT_FOUND, Json("Question not found".to_string()))
+        (
+            StatusCode::NOT_FOUND,
+            Json("Question not found".to_string()),
+        )
     }
 }
 
-async fn delete_question(State(questions): State<Questions>, Path(id): Path<Uuid>) -> (StatusCode, Json<String>, ) {
+async fn delete_question(
+    State(questions): State<Questions>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
     let id = Path(id);
     let mut questions = questions.lock().await;
     if questions.remove(&id).is_some() {
         (StatusCode::OK, Json("Question deleted".to_string()))
     } else {
-        (StatusCode::NOT_FOUND, Json("Question not found".to_string()))
+        (
+            StatusCode::NOT_FOUND,
+            Json("Question not found".to_string()),
+        )
     }
 }
 
-async fn add_answer(State(questions): State<Questions>, Path(id): Path<Uuid>, answer: Json<String>) -> (StatusCode, Json<String>) {
+async fn add_answer(
+    State(questions): State<Questions>,
+    Path(id): Path<Uuid>,
+    answer: Json<String>,
+) -> impl IntoResponse {
     let id = Path(id);
     let mut questions = questions.lock().await;
     if let Some(question) = questions.get_mut(&id) {
         question.answer = Some(answer.to_string());
         (StatusCode::OK, Json("Answer added".to_string()))
     } else {
-        (StatusCode::NOT_FOUND, Json("Question not found".to_string()))
+        (
+            StatusCode::NOT_FOUND,
+            Json("Question not found".to_string()),
+        )
     }
 }
 
@@ -93,12 +117,14 @@ async fn main() {
     let questions = Questions::default();
 
     let app = Router::new()
-       .route("/question/:id", get(get_question))
-       .route("/question", post(add_question))
-       .route("/question/:id", put(update_question))
-       .route("/question/:id", delete(delete_question))
-       .route("/question/:id/answer", post(add_answer));
-    //let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3030));
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030").await.unwrap();
+        .route("/question/:id", get(get_question))
+        .route("/question", post(add_question))
+        .route("/question/:id", put(update_question))
+        .route("/question/:id", delete(delete_question))
+        .route("/question/:id/answer", post(add_answer));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    println!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 }
