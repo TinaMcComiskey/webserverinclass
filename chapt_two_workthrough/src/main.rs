@@ -20,7 +20,7 @@ struct Question {
 
 type Questions = Arc<Mutex<HashMap<Uuid, Question>>>;
 
-async fn get_question(State(questions): State<Questions>, Path(id): Path<Uuid>) -> Response<Body> {
+async fn get_question(State(questions): State<Questions>) -> Response<Body> {
     let id = Uuid::new_v4();
     let questions = questions.lock().await;
     match questions.get(&id) {
@@ -40,21 +40,21 @@ async fn get_question(State(questions): State<Questions>, Path(id): Path<Uuid>) 
     }
 }
 
-async fn add_question(State(questions): State<Questions>, new_question: Json<Question>) -> (StatusCode, Json<Uuid>) {
+async fn add_question(State(questions): State<Questions>, Path(id): Path<Uuid>, new_question: Json<Question>) -> (StatusCode, Json<String>) {
     let mut questions = questions.lock().await;
-    let id = Uuid::new_v4();
+    let id = Path(id);
     let question = Question {
         id: id.clone(),
         text: new_question.text.clone(),
         answer: None,
     };
-    questions.insert(id, question);
-    (StatusCode::OK, Json(id))
+    questions.insert(*id, question);
+    (StatusCode::OK, Json("Inserted successfully".to_string()))
 }
 
-async fn update_question(State(questions): State<Questions>, Path(id): Path<Uuid>, updated_question: Json<Question>) -> (StatusCode, Json<String>) {
-    let id = Uuid::new_v4();
+async fn update_question(State(questions): State<Questions>, updated_question: Json<Question>) -> (StatusCode, Json<String>) {
     let mut questions = questions.lock().await;
+    let id = updated_question.id.clone();
     if let Some(question) = questions.get_mut(&id) {
         *question = Question {
             id: id.clone(),
@@ -67,8 +67,8 @@ async fn update_question(State(questions): State<Questions>, Path(id): Path<Uuid
     }
 }
 
-async fn delete_question(State(questions): State<Questions>, Path(id): Path<Uuid>) -> (StatusCode, Json<String>) {
-    let id = Uuid::new_v4();
+async fn delete_question(State(questions): State<Questions>, Path(id): Path<Uuid>) -> (StatusCode, Json<String>, ) {
+    let id = Path(id);
     let mut questions = questions.lock().await;
     if questions.remove(&id).is_some() {
         (StatusCode::OK, Json("Question deleted".to_string()))
@@ -78,7 +78,7 @@ async fn delete_question(State(questions): State<Questions>, Path(id): Path<Uuid
 }
 
 async fn add_answer(State(questions): State<Questions>, Path(id): Path<Uuid>, answer: Json<String>) -> (StatusCode, Json<String>) {
-    let id = Uuid::new_v4();
+    let id = Path(id);
     let mut questions = questions.lock().await;
     if let Some(question) = questions.get_mut(&id) {
         question.answer = Some(answer.to_string());
