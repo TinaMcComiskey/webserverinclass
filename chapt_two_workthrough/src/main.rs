@@ -4,14 +4,16 @@ use axum::{
     http::{Response, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post, put},
-    Json, Router, 
+    Json, Router,
 };
 
 use serde::{Deserialize, Serialize};
-use hyper::server;
 use std::collections::HashMap;
 use std::sync::Arc;
+use hyper::server;
+use std::net::SocketAddr;
 use tokio::sync::Mutex;
+use tokio::net::TcpListener;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
@@ -23,8 +25,10 @@ struct Question {
 
 type Questions = Arc<Mutex<HashMap<Uuid, Question>>>;
 
-async fn get_question(State(questions): State<Questions>) -> impl IntoResponse {
-    let id = Uuid::new_v4();
+async fn get_question(
+    State(questions): State<Questions>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
     let questions = questions.lock().await;
     match questions.get(&id) {
         Some(question) => {
@@ -43,17 +47,15 @@ async fn get_question(State(questions): State<Questions>) -> impl IntoResponse {
 
 async fn add_question(
     State(questions): State<Questions>,
-    Path(id): Path<Uuid>,
     new_question: Json<Question>,
 ) -> impl IntoResponse {
     let mut questions = questions.lock().await;
-    let id = Path(id);
     let question = Question {
-        id: id.clone(),
+        id: new_question.id.clone(),
         text: new_question.text.clone(),
         answer: None,
     };
-    questions.insert(*id, question);
+    questions.insert(question.id, question);
     (StatusCode::OK, Json("Inserted successfully".to_string()))
 }
 
@@ -62,10 +64,9 @@ async fn update_question(
     updated_question: Json<Question>,
 ) -> impl IntoResponse {
     let mut questions = questions.lock().await;
-    let id = updated_question.id.clone();
-    if let Some(question) = questions.get_mut(&id) {
+    if let Some(question) = questions.get_mut(&updated_question.id) {
         *question = Question {
-            id: id.clone(),
+            id: updated_question.id.clone(),
             text: updated_question.text.clone(),
             answer: updated_question.answer.clone(),
         };
@@ -82,7 +83,6 @@ async fn delete_question(
     State(questions): State<Questions>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let id = Path(id);
     let mut questions = questions.lock().await;
     if questions.remove(&id).is_some() {
         (StatusCode::OK, Json("Question deleted".to_string()))
@@ -99,7 +99,6 @@ async fn add_answer(
     Path(id): Path<Uuid>,
     answer: Json<String>,
 ) -> impl IntoResponse {
-    let id = Path(id);
     let mut questions = questions.lock().await;
     if let Some(question) = questions.get_mut(&id) {
         question.answer = Some(answer.to_string());
@@ -118,10 +117,14 @@ async fn main() {
 
     let app = Router::new()
         .route("/question/:id", get(get_question))
-        .route("/question", post(add_question))
         .route("/question/:id", put(update_question))
         .route("/question/:id", delete(delete_question))
-        .route("/question/:id/answer", post(add_answer));
+        .route("/question/:id/answer", post(add_answer))
+        .route("/question", post(add_question));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let listener = TcpListener::bind(&addr).await.unwrap();
+    println!("Server running on http://{}", addr);
+
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
