@@ -107,6 +107,27 @@ async fn add_answer(
     }
 }
 
+// Define a function to serve HTML content
+async fn index() -> impl IntoResponse {
+    let html = r#"
+        <html>
+        <body>
+            <h1>Questions and Answers Web Server!</h1>
+            <button onclick="window.location.href='/question'">Add Question</button>
+            <button onclick="window.location.href='/question/123'">Get Question</button>
+            <button onclick="window.location.href='/question/123/answer'">Add Answer</button>
+            <button onclick="window.location.href='/question/123'">Update Question</button>
+            <button onclick="window.location.href='/question/123'">Delete Question</button>
+        </body>
+        </html>
+    "#;
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from(html))
+        .unwrap()
+}
+
 #[tokio::main]
 async fn main() {
     let questions = Questions::default();
@@ -117,6 +138,7 @@ async fn main() {
         .route("/question/:id", delete(delete_question))
         .route("/question/:id/answer", post(add_answer))
         .route("/question", post(add_question))
+        .route("/", get(index)) // Route for serving HTML content
         .with_state(questions);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
