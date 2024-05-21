@@ -138,10 +138,10 @@ async fn main() {
         .route("/question/:id", delete(delete_question))
         .route("/question/:id/answer", post(add_answer))
         .route("/question", post(add_question))
-        .route("/", get(index)) // Route for serving HTML content
+       // .route("/", get(index)) // Route for serving HTML content
         .with_state(questions);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:5433")
         .await
         .unwrap();
     println!("listening on {}", listener.local_addr().unwrap());

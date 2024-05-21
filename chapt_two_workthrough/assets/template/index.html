@@ -1,0 +1,34 @@
+<html>
+  <head>
+    <title>Questions and Answers</title>
+    <link rel="stylesheet" href="{{stylesheet}}">
+  </head>
+  <body>
+  <h1>Question</h1>
+  {%- if let Some(thequestion) = question -%}
+  <div class="question">
+      <span class="teller">{{thequestion.id_question}}</span><br/>
+      <span class="tellee">{{thequestion.answer}}</span><br/>
+  </div>
+  <span class="annotation">
+    [id: {{thequestion.id -}}
+    {%- if let Some(tags) = tags -%}; tags={{- tags -}}{%- endif -%}
+    {%- if let Some(source) = thejoke.source %}; source={{- source -}}{%- endif -%}
+    ]
+  {%- endif -%}
+  </span><br/><br/>
+  <form method="get" action="/">
+  <input type="submit" value="Tell me another!"/>
+  </form>
+  <form method="get" action="/tell">
+  <input type="submit" value="Ask me for one!"/>
+  </form>
+  <form method="get" action="/">
+  <input type="text" name="id"/>
+  <input type="submit" value="Find this question"/>
+  </form>
+  {%- if let Some(error) = error -%}
+  <div class="error">{{error}}</div>
+  {%- endif -%}
+  </body>
+</html>
