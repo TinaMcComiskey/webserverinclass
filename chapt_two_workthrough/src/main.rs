@@ -6,10 +6,11 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
+use deadpool_postgres::{tokio_postgres::NoTls, Pool};
+use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::env;
+use tokio_postgres::row::Row;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
@@ -17,17 +18,21 @@ struct Question {
     id: Uuid,
     text: String,
     answer: Option<String>,
+    source: Option<String>,
 }
 
-type Questions = Arc<Mutex<HashMap<Uuid, Question>>>;
+type DbPool = Pool;
 
-async fn get_question(
-    State(questions): State<Questions>,
-    Path(id): Path<Uuid>,
-) -> impl IntoResponse {
-    let questions = questions.lock().await;
-    match questions.get(&id) {
-        Some(question) => {
+async fn get_question(State(pool): State<DbPool>, Path(id): Path<Uuid>) -> impl IntoResponse {
+    let client = pool.get().await.unwrap();
+    let row = client
+        .query_opt("SELECT * FROM questions WHERE id = $1", &[&id.to_string()])
+        .await
+        .unwrap();
+
+    match row {
+        Some(row) => {
+            let question = row_to_question(row);
             let json = serde_json::to_string(&question).unwrap();
             Response::builder()
                 .status(StatusCode::OK)
@@ -42,30 +47,44 @@ async fn get_question(
 }
 
 async fn add_question(
-    State(questions): State<Questions>,
+    State(pool): State<DbPool>,
     new_question: Json<Question>,
 ) -> impl IntoResponse {
-    let mut questions = questions.lock().await;
-    let question = Question {
-        id: new_question.id,
-        text: new_question.text.clone(),
-        answer: None,
-    };
-    questions.insert(question.id, question);
+    let client = pool.get().await.unwrap();
+    client
+        .execute(
+            "INSERT INTO questions (id, question, answer, source) VALUES ($1, $2, $3, $4)",
+            &[
+                &new_question.id.to_string(),
+                &new_question.text,
+                &new_question.answer,
+                &new_question.source,
+            ],
+        )
+        .await
+        .unwrap();
     (StatusCode::OK, Json("Inserted successfully".to_string()))
 }
 
 async fn update_question(
-    State(questions): State<Questions>,
+    State(pool): State<DbPool>,
     updated_question: Json<Question>,
 ) -> impl IntoResponse {
-    let mut questions = questions.lock().await;
-    if let Some(question) = questions.get_mut(&updated_question.id) {
-        *question = Question {
-            id: updated_question.id,
-            text: updated_question.text.clone(),
-            answer: updated_question.answer.clone(),
-        };
+    let client = pool.get().await.unwrap();
+    let rows_affected = client
+        .execute(
+            "UPDATE questions SET question = $1, answer = $2, source = $3 WHERE id = $4",
+            &[
+                &updated_question.text,
+                &updated_question.answer,
+                &updated_question.source,
+                &updated_question.id.to_string(),
+            ],
+        )
+        .await
+        .unwrap();
+
+    if rows_affected == 1 {
         (StatusCode::OK, Json("Question updated".to_string()))
     } else {
         (
@@ -75,12 +94,14 @@ async fn update_question(
     }
 }
 
-async fn delete_question(
-    State(questions): State<Questions>,
-    Path(id): Path<Uuid>,
-) -> impl IntoResponse {
-    let mut questions = questions.lock().await;
-    if questions.remove(&id).is_some() {
+async fn delete_question(State(pool): State<DbPool>, Path(id): Path<Uuid>) -> impl IntoResponse {
+    let client = pool.get().await.unwrap();
+    let rows_affected = client
+        .execute("DELETE FROM questions WHERE id = $1", &[&id.to_string()])
+        .await
+        .unwrap();
+
+    if rows_affected == 1 {
         (StatusCode::OK, Json("Question deleted".to_string()))
     } else {
         (
@@ -91,13 +112,20 @@ async fn delete_question(
 }
 
 async fn add_answer(
-    State(questions): State<Questions>,
+    State(pool): State<DbPool>,
     Path(id): Path<Uuid>,
     answer: Json<String>,
 ) -> impl IntoResponse {
-    let mut questions = questions.lock().await;
-    if let Some(question) = questions.get_mut(&id) {
-        question.answer = Some(answer.to_string());
+    let client = pool.get().await.unwrap();
+    let rows_affected = client
+        .execute(
+            "UPDATE questions SET answer = $1 WHERE id = $2",
+            &[&answer.to_string(), &id.to_string()],
+        )
+        .await
+        .unwrap();
+
+    if rows_affected == 1 {
         (StatusCode::OK, Json("Answer added".to_string()))
     } else {
         (
@@ -107,7 +135,6 @@ async fn add_answer(
     }
 }
 
-// Define a function to serve HTML content
 async fn index() -> impl IntoResponse {
     let html = r#"
         <html>
@@ -128,9 +155,53 @@ async fn index() -> impl IntoResponse {
         .unwrap()
 }
 
+fn row_to_question(row: Row) -> Question {
+    Question {
+        id: Uuid::parse_str(row.get("id")).unwrap(),
+        text: row.get("question"),
+        answer: row.get("answer"),
+        source: row.get("source"),
+    }
+}
+
+async fn init_db(pool: &DbPool) {
+    let client = pool.get().await.unwrap();
+    client
+        .batch_execute(
+            "CREATE TABLE IF NOT EXISTS questions (
+            id TEXT PRIMARY KEY,
+            question TEXT NOT NULL,
+            answer TEXT,
+            source TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS tags (
+            id TEXT REFERENCES questions(id),
+            tag TEXT NOT NULL
+        );",
+        )
+        .await
+        .unwrap();
+}
+
 #[tokio::main]
 async fn main() {
-    let questions = Questions::default();
+    dotenv().ok();
+    
+    let password = std::fs::read_to_string(&env::var("PG_PASSWORDFILE").expect("PG_PASSWORDFILE must be set"))
+        .expect("Failed to read password file");
+
+    let mut config = tokio_postgres::Config::new();
+    config.user(&env::var("PG_USER").expect("PG_USER must be set"));
+    config.password(password.trim());
+    config.dbname(&env::var("PG_DBNAME").expect("PG_DBNAME must be set"));
+    config.host(&env::var("PG_HOST").expect("PG_HOST must be set"));
+    config.port(5432);
+
+    let manager = deadpool_postgres::Manager::new(config, NoTls);
+    let pool = Pool::builder(manager).max_size(16).build().unwrap();
+
+    init_db(&pool).await;
 
     let app = Router::new()
         .route("/question/:id", get(get_question))
@@ -138,10 +209,10 @@ async fn main() {
         .route("/question/:id", delete(delete_question))
         .route("/question/:id/answer", post(add_answer))
         .route("/question", post(add_question))
-       // .route("/", get(index)) // Route for serving HTML content
-        .with_state(questions);
+        .route("/", get(index)) // Route for serving HTML content
+        .with_state(pool);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:5433")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .unwrap();
     println!("listening on {}", listener.local_addr().unwrap());
