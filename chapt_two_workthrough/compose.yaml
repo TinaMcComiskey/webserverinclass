@@ -4,17 +4,16 @@ services:
       context: .
       target: final
     ports:
-      - 5433:5432
+      - 7000:7000
     environment:
-      - PG_DBNAME=rustwebdev
+      - PG_httDBNAME=rustwebdev
       - PG_HOST=db
       - PG_USER=postgres
       - PG_PASSWORDFILE=/run/secrets/db-password
     secrets:
       - db-password
     depends_on:
-      db:
-        condition: service_healthy
+      - db
 
   db:
     image: postgres
@@ -24,15 +23,11 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     environment:
+      - POSTGRES_USER=postgres
       - POSTGRES_DB=rustwebdev
       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
     expose:
       - 5432
-    healthcheck:
-      test: ["CMD", "pg_isready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   db-data:

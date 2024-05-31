@@ -212,7 +212,7 @@ async fn main() {
         .route("/", get(index)) // Route for serving HTML content
         .with_state(pool);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:7000")
         .await
         .unwrap();
     println!("listening on {}", listener.local_addr().unwrap());

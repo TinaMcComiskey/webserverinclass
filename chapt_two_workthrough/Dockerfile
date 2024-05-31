@@ -41,10 +41,10 @@ COPY --chown=appuser:appuser ./assets ./assets
 COPY --chown=appuser:appuser ./migrations ./migrations
 
 # Expose the port the application listens on
-EXPOSE 5433
+EXPOSE 7000
 
 # Ensure the secrets directory exists and the secrets file is copied
-COPY --chown=appuser:appuser /run/secrets/db-password /run/secrets/db-password
+# COPY --chown=appuser:appuser /run/secrets/db-password /run/secrets/db-password
 
 # Command to run the application
-CMD ["/bin/server"]
+CMD ["/bin/server/chapt_two_workthrough"]
