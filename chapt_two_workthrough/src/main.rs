@@ -140,11 +140,11 @@ async fn index() -> impl IntoResponse {
         <html>
         <body>
             <h1>Questions and Answers Web Server!</h1>
-            <button onclick="window.location.href='/question'">Add Question</button>
-            <button onclick="window.location.href='/question/123'">Get Question</button>
-            <button onclick="window.location.href='/question/123/answer'">Add Answer</button>
-            <button onclick="window.location.href='/question/123'">Update Question</button>
-            <button onclick="window.location.href='/question/123'">Delete Question</button>
+            <button onclick="window.location.href='/question/add'">Add Question</button>
+            <button onclick="window.location.href='/question/get'">Get Question</button>
+            <button onclick="window.location.href='/question/answer'">Add Answer</button>
+            <button onclick="window.location.href='/question/update'">Update Question</button>
+            <button onclick="window.location.href='/question/delete'">Delete Question</button>
         </body>
         </html>
     "#;
