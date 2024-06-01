@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 struct Question {
-    id: Uuid,
+    id: String,
     text: String,
     answer: Option<String>,
     source: Option<String>,
@@ -23,7 +23,7 @@ struct Question {
 
 type DbPool = Pool;
 
-async fn get_question(State(pool): State<DbPool>, Path(id): Path<Uuid>) -> impl IntoResponse {
+async fn get_question(State(pool): State<DbPool>, Path(id): Path<String>) -> impl IntoResponse {
     let client = pool.get().await.unwrap();
     let row = client
         .query_opt("SELECT * FROM questions WHERE id = $1", &[&id.to_string()])
@@ -94,7 +94,7 @@ async fn update_question(
     }
 }
 
-async fn delete_question(State(pool): State<DbPool>, Path(id): Path<Uuid>) -> impl IntoResponse {
+async fn delete_question(State(pool): State<DbPool>, Path(id): Path<String>) -> impl IntoResponse {
     let client = pool.get().await.unwrap();
     let rows_affected = client
         .execute("DELETE FROM questions WHERE id = $1", &[&id.to_string()])
@@ -113,7 +113,7 @@ async fn delete_question(State(pool): State<DbPool>, Path(id): Path<Uuid>) -> im
 
 async fn add_answer(
     State(pool): State<DbPool>,
-    Path(id): Path<Uuid>,
+    Path(id): Path<String>,
     answer: Json<String>,
 ) -> impl IntoResponse {
     let client = pool.get().await.unwrap();
@@ -157,7 +157,7 @@ async fn index() -> impl IntoResponse {
 
 fn row_to_question(row: Row) -> Question {
     Question {
-        id: Uuid::parse_str(row.get("id")).unwrap(),
+        id: row.get("id"),
         text: row.get("question"),
         answer: row.get("answer"),
         source: row.get("source"),
@@ -212,7 +212,7 @@ async fn main() {
         .route("/", get(index)) // Route for serving HTML content
         .with_state(pool);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:7000")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .unwrap();
     println!("listening on {}", listener.local_addr().unwrap());

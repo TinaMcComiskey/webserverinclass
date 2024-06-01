@@ -4,9 +4,9 @@ services:
       context: .
       target: final
     ports:
-      - 7000:7000
+      - 3000:3000
     environment:
-      - PG_httDBNAME=rustwebdev
+      - PG_DBNAME=rustwebdev
       - PG_HOST=db
       - PG_USER=postgres
       - PG_PASSWORDFILE=/run/secrets/db-password
