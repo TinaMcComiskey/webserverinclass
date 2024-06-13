@@ -5,7 +5,3 @@ CREATE TABLE IF NOT EXISTS questions (
   source TEXT
 );
 
-CREATE TABLE IF NOT EXISTS tags (
-  id TEXT REFERENCES jokes(id),
-  tag TEXT NOT NULL
-);
