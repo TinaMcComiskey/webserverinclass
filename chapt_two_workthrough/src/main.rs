@@ -11,7 +11,6 @@ use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 use std::env;
 use tokio_postgres::row::Row;
-use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 struct Question {
@@ -187,9 +186,10 @@ async fn init_db(pool: &DbPool) {
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-    
-    let password = std::fs::read_to_string(&env::var("PG_PASSWORDFILE").expect("PG_PASSWORDFILE must be set"))
-        .expect("Failed to read password file");
+
+    let password =
+        std::fs::read_to_string(&env::var("PG_PASSWORDFILE").expect("PG_PASSWORDFILE must be set"))
+            .expect("Failed to read password file");
 
     let mut config = tokio_postgres::Config::new();
     config.user(&env::var("PG_USER").expect("PG_USER must be set"));
@@ -209,12 +209,10 @@ async fn main() {
         .route("/question/:id", delete(delete_question))
         .route("/question/:id/answer", post(add_answer))
         .route("/question", post(add_question))
-        .route("/", get(index)) // Route for serving HTML content
+      //  .route("/", get(index)) // Route for serving HTML content
         .with_state(pool);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 }

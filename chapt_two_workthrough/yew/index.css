@@ -1,8 +1,4 @@
-.teller {
-    font-weight: bold;
-}
-
-.tellee {
+.question {
     font-style: italic;
 }
 
@@ -14,10 +10,6 @@
 h1 {
     font-weight: bold;
     font-size: 150%;
-}
-
-.joke {
-    border: 1px solid black;
 }
 
 .error {
